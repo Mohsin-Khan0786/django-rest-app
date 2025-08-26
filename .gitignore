@@ -1,1 +1,43 @@
-./venv
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment
+venv/
+ENV/
+env/
+.venv/
+
+# Django stuff
+*.log
+*.pot
+*.pyc
+db.sqlite3
+media/
+staticfiles/
+
+# Migrations 
+*/migrations/*.py
+!*/migrations/__init__.py
+
+# IDE/editor files
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Python packaging
+*.egg
+*.egg-info/
+dist/
+build/
+
+# pytest / coverage
+.coverage
+htmlcov/
+.pytest_cache/
