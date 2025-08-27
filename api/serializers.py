@@ -1,4 +1,3 @@
-
 from django.contrib.auth import get_user_model
 from django.contrib.auth.hashers import check_password
 
@@ -10,9 +9,7 @@ User = get_user_model()
 
 
 class RegisterSerializer(serializers.ModelSerializer):
-
     password = serializers.CharField(write_only=True)
-    id = serializers.IntegerField(read_only=True)
     full_name = serializers.SerializerMethodField()
     display_name = serializers.CharField(source="username", read_only=True)
 
@@ -27,12 +24,10 @@ class RegisterSerializer(serializers.ModelSerializer):
         return f"{obj.first_name} {obj.last_name}"
 
     def create(self, validated_data):
-        
         return User.objects.create_user(**validated_data)
 
 
 class LoginSerializer(serializers.Serializer):
-
     email = serializers.EmailField()
     password = serializers.CharField(write_only=True)
 
@@ -41,25 +36,19 @@ class LoginSerializer(serializers.Serializer):
         password = attrs.get("password")
 
         try:
-           
             user = User.objects.get(email=email, is_active=True)
         except User.DoesNotExist:
-            raise serializers.ValidationError("Invalid email or password")
+            raise serializers.ValidationError("Invalid email")
 
         if not check_password(password, user.password):
-            raise serializers.ValidationError("Invalid email or password")
+            raise serializers.ValidationError("Invalid password")
 
         attrs["user"] = user
         return attrs
 
 
 class LogoutSerializer(serializers.Serializer):
-
     refresh = serializers.CharField()
-
-    def validate(self, attrs):
-        self.token = attrs["refresh"]
-        return attrs
 
     def save(self, **kwargs):
         try:

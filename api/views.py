@@ -8,12 +8,11 @@ from api.serializers import RegisterSerializer, LoginSerializer, LogoutSerialize
 
 
 class RegisterAPIView(APIView):
-    def post(self, request, format=None):
+    def post(self, request,):  
         serializer = RegisterSerializer(data=request.data)
         if serializer.is_valid(raise_exception=True):
             serializer.save()
             return Response(serializer.data, status=status.HTTP_201_CREATED)
-
 
 class LoginView(APIView):
     def post(self, request):
@@ -23,18 +22,21 @@ class LoginView(APIView):
         user = serializer.validated_data["user"]
         refresh = RefreshToken.for_user(user)
 
-        return Response({
-            "refresh": str(refresh),
-            "access": str(refresh.access_token),
-            "email": user.email,
-            "username": user.username,
-        }, status=status.HTTP_200_OK)
+        return Response(
+            {
+                "refresh": str(refresh),
+                "access": str(refresh.access_token),
+                "email": user.email,
+                "username": user.username,
+            },
+            status=status.HTTP_200_OK
+        )
 
 
 class LogoutView(APIView):
     permission_classes = [IsAuthenticated]
 
-    def post(self, request, format=None):
+    def post(self, request,):
         serializer = LogoutSerializer(data=request.data)
         if serializer.is_valid(raise_exception=True):
             serializer.save()

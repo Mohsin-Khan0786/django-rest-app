@@ -8,6 +8,7 @@ venv/
 ENV/
 env/
 .venv/
+.env
 
 # Django stuff
 *.log
@@ -16,28 +17,3 @@ env/
 db.sqlite3
 media/
 staticfiles/
-
-# Migrations 
-*/migrations/*.py
-!*/migrations/__init__.py
-
-# IDE/editor files
-.vscode/
-.idea/
-*.sublime-project
-*.sublime-workspace
-
-# System files
-.DS_Store
-Thumbs.db
-
-# Python packaging
-*.egg
-*.egg-info/
-dist/
-build/
-
-# pytest / coverage
-.coverage
-htmlcov/
-.pytest_cache/
