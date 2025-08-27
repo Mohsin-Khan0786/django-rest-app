@@ -3,23 +3,23 @@ from django.contrib.auth.admin import UserAdmin
 from .models import CustomUser
 
 
-# Register your models here.
+@admin.register(CustomUser)
 class CustomUserAdmin(UserAdmin):
-
-    list_display=("id","email","username","is_staff","is_active")
-    search_fields=["username","email"]
-    ordering=('email',)
+    model = CustomUser
+    list_display = ("id", "email", "username", "first_name", "last_name", "is_staff")
+    search_fields = ("email", "username")
+    ordering = ("id",)
 
     fieldsets = (
-        (None, {"fields": ("email", "username", "password")}),
-        ("Permissions", {"fields": ("is_staff", "is_active", "is_superuser", "groups", "user_permissions")}),
+        (None, {"fields": ("email", "password")}),
+        ("Personal info", {"fields": ("username", "first_name", "last_name")}),
+        ("Permissions", {"fields": ("is_active", "is_staff", "is_superuser", "groups", "user_permissions")}),
+        ("Important dates", {"fields": ("last_login", "date_joined")}),
     )
 
     add_fieldsets = (
         (None, {
             "classes": ("wide",),
-            "fields": ("email", "username", "password1", "password2", "is_staff", "is_active")}
-        ),
+            "fields": ("email", "username", "password1", "password2", "is_staff", "is_superuser"),
+        }),
     )
-
-admin.site.register(CustomUser,CustomUserAdmin)
