@@ -1,11 +1,10 @@
-from rest_framework.views import APIView
-from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from api.serializers import RegisterSerializer, LoginSerializer, LogoutSerializer
-
 
 
 class RegisterAPIView(APIView):
@@ -30,6 +29,7 @@ class LoginView(APIView):
             "email": user.email,
             "username": user.username,
         }, status=status.HTTP_200_OK)
+
 
 class LogoutView(APIView):
     permission_classes = [IsAuthenticated]

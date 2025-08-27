@@ -1,30 +1,38 @@
-from rest_framework import serializers
-from api.models import CustomUser
-from rest_framework_simplejwt.tokens import RefreshToken, TokenError
+
+from django.contrib.auth import get_user_model
 from django.contrib.auth.hashers import check_password
 
+from rest_framework import serializers
+from rest_framework_simplejwt.tokens import RefreshToken, TokenError
 
-class RegisterSerializer(serializers.ModelSerializer):  
+
+User = get_user_model()
+
+
+class RegisterSerializer(serializers.ModelSerializer):
+
     password = serializers.CharField(write_only=True)
     id = serializers.IntegerField(read_only=True)
     full_name = serializers.SerializerMethodField()
     display_name = serializers.CharField(source="username", read_only=True)
 
     class Meta:
-        model = CustomUser
-        fields = ["id", "email", "username", "first_name", "last_name",
-                  "display_name", "password", "full_name"]
+        model = User
+        fields = [
+            "id", "email", "username", "first_name", "last_name",
+            "display_name", "password", "full_name"
+        ]
 
     def get_full_name(self, obj):
         return f"{obj.first_name} {obj.last_name}"
 
     def create(self, validated_data):
-        password = validated_data.pop("password")
-        user = CustomUser.objects.create_user(password=password, **validated_data)
-        return user
+        
+        return User.objects.create_user(**validated_data)
 
 
 class LoginSerializer(serializers.Serializer):
+
     email = serializers.EmailField()
     password = serializers.CharField(write_only=True)
 
@@ -33,8 +41,9 @@ class LoginSerializer(serializers.Serializer):
         password = attrs.get("password")
 
         try:
-            user = CustomUser.objects.get(email=email)
-        except CustomUser.DoesNotExist:
+           
+            user = User.objects.get(email=email, is_active=True)
+        except User.DoesNotExist:
             raise serializers.ValidationError("Invalid email or password")
 
         if not check_password(password, user.password):
@@ -45,6 +54,7 @@ class LoginSerializer(serializers.Serializer):
 
 
 class LogoutSerializer(serializers.Serializer):
+
     refresh = serializers.CharField()
 
     def validate(self, attrs):

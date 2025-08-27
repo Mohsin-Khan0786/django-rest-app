@@ -10,6 +10,7 @@ class CustomUserAdmin(UserAdmin):
     search_fields = ("email", "username")
     ordering = ("id",)
 
+
     fieldsets = (
         (None, {"fields": ("email", "password")}),
         ("Personal info", {"fields": ("username", "first_name", "last_name")}),
