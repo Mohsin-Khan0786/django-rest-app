@@ -4,3 +4,6 @@ from django.apps import AppConfig
 class TicketapiConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
     name = 'ticketapi'
+
+    def ready(self):
+        import  ticketapi.signals
