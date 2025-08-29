@@ -22,4 +22,5 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     
     path('api/auth/', include("api.urls")),
+    path('api/',include("ticketapi.urls")),
 ]
