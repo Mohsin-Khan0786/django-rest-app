@@ -1,51 +1,71 @@
 from django.db.models.signals import post_save, post_delete
 from django.dispatch import receiver
-from django.db.models.signals import post_save as django_post_save
-from django.dispatch import receiver as django_receiver
-from .models import Task, Comments, Document, TimeLine, Profile, CustomUser
+from django.contrib.auth import get_user_model
+from .models import (Project,Task, Comments, TimeLine,
+                     Notification, Profile)
+
+User = get_user_model()
+
+@receiver(post_save, sender=Project)
+def create_project_timeline(sender, instance, created, **kwargs):
+    """Create timeline event when project is created/updated"""
+    if created:
+        TimeLine.objects.create(
+            project=instance,
+            event_type="created"
+        )
+    else:
+        TimeLine.objects.create(
+            project=instance,
+            event_type="updated"
+        )
 
 
-def create_timeline_event(project, action, source):
+@receiver(post_delete, sender=Project)
+def create_project_deleted_timeline(sender, instance, **kwargs):
+    """Create timeline event when project is deleted"""
     TimeLine.objects.create(
-        project=project,
-        event_type=action,
-        description=f"{source} {action}" 
+        project=instance,
+        event_type="deleted"
     )
 
+
 @receiver(post_save, sender=Task)
-def task_created_or_updated(sender, instance, created, **kwargs):
-    action = "created" if created else "updated"
-    create_timeline_event(instance.project, action, "Task")
+def create_task_timeline_and_notifications(sender, instance, created, **kwargs):
+    if created:
+        TimeLine.objects.create(
+            project=instance.project,
+            event_type="created"
+        )
+    else:
+        TimeLine.objects.create(
+            project=instance.project,
+            event_type="updated"
+        )
+    
+    if not created and instance.assignee:
+        Notification.objects.create(
+            user=instance.assignee,
+            text=f"You have been assigned to task: {instance.title}"
+        )
+
 
 @receiver(post_delete, sender=Task)
-def task_deleted(sender, instance, **kwargs):
-    create_timeline_event(instance.project, "deleted", "Task")
+def create_task_deleted_timeline(sender, instance, **kwargs):
+    """Create timeline event when task is deleted"""
+    TimeLine.objects.create(
+        project=instance.project,
+        event_type="deleted"
+    )
+
 
 @receiver(post_save, sender=Comments)
-def comment_created_or_updated(sender, instance, created, **kwargs):
-    action = "created" if created else "updated"
-    create_timeline_event(instance.project, action, "Comment")
+def create_comment_notifications(sender, instance, created, **kwargs):
+    """Create notifications when comments are added to tasks"""
+    if created and instance.task and instance.task.assignee:
 
-@receiver(post_delete, sender=Comments)
-def comment_deleted(sender, instance, **kwargs):
-    create_timeline_event(instance.project, "deleted", "Comment")
-
-@receiver(post_save, sender=Document)
-def document_created_or_updated(sender, instance, created, **kwargs):
-    action = "created" if created else "updated"
-    create_timeline_event(instance.project, action, "Document")
-
-@receiver(post_delete, sender=Document)
-def document_deleted(sender, instance, **kwargs):
-    create_timeline_event(instance.project, "deleted", "Document")
-
-
-@django_receiver(django_post_save, sender=CustomUser)
-def create_user_profile(sender, instance, created, **kwargs):
-    if created:
-        Profile.objects.create(user=instance)
-
-@django_receiver(django_post_save, sender=CustomUser)
-def save_user_profile(sender, instance, **kwargs):
-    if hasattr(instance, 'profile'):
-        instance.profile.save()
+        if instance.author != instance.task.assignee:
+            Notification.objects.create(
+                user=instance.task.assignee,
+                text=f"New comment on task '{instance.task.title}' by {instance.author.email}"
+            )

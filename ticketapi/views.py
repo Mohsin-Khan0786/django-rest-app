@@ -1,39 +1,44 @@
+from django.shortcuts import get_object_or_404
 from django.contrib.auth import get_user_model
-from rest_framework import generics, mixins, status
-from rest_framework.views import APIView
-from rest_framework.permissions import IsAuthenticated, AllowAny
+
+from rest_framework import generics, status, permissions
 from rest_framework.response import Response
-from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
-from .serializers import (
-    RegisterSerializer, LoginSerializer, LogoutSerializer, ProfileSerializer,
-    ProjectSerializer, TaskSerializer, DocumentSerializer, CommentSerializer,
-    NotificationSerializer, TimeLineSerializer
+
+from .permissions import IsManager,IsCommentAuthor
+from .models import (
+    Profile, 
+    Project, Task, Document,
+    Comments, Notification, TimeLine
 )
-from .models import Project, Task, Document, Comments, Notification, TimeLine, Profile
+from .serializers import (
+    RegisterSerializer, LoginSerializer, LogoutSerializer,
+    ProjectSerializer, TaskSerializer, DocumentSerializer,
+    CommentsSerializer, TimeLineSerializer, NotificationSerializer,
+    AssignTaskSerializer, MarkNotificationReadSerializer
+)
 
 User = get_user_model()
 
 
-# ----------------- Auth APIs -----------------
-class RegisterView(mixins.CreateModelMixin, generics.GenericAPIView):
-    queryset = User.objects.all()
+class RegisterView(generics.CreateAPIView):
     serializer_class = RegisterSerializer
-    permission_classes = [AllowAny]
-
-    def post(self, request, *args, **kwargs):
-        return self.create(request, *args, **kwargs)
+    queryset = User.objects.all()
+    permission_classes = [permissions.AllowAny]
 
 
 class LoginView(generics.GenericAPIView):
     serializer_class = LoginSerializer
-    permission_classes = [AllowAny]
+    permission_classes = [permissions.AllowAny]
 
     def post(self, request, *args, **kwargs):
-        serializer = self.serializer_class(data=request.data)
+        serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        user = serializer.validated_data['user']
+
+        user = serializer.validated_data.get("user")
         refresh = RefreshToken.for_user(user)
+
         return Response({
             "refresh": str(refresh),
             "access": str(refresh.access_token),
@@ -44,236 +49,194 @@ class LoginView(generics.GenericAPIView):
 
 class LogoutView(generics.GenericAPIView):
     serializer_class = LogoutSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         serializer.save()
-        return Response({"detail": "Logout successful."}, status=status.HTTP_205_RESET_CONTENT)
+        return Response(
+            {"msg": "Logout successful"},
+            status=status.HTTP_205_RESET_CONTENT
+        )
 
 
-# ----------------- Profile -----------------
-class ProfileView(generics.RetrieveUpdateAPIView):
-    serializer_class = ProfileSerializer
-    permission_classes = [IsAuthenticated]
-    parser_classes = [MultiPartParser, FormParser]
-
-    def get_object(self):
-        try:
-            return self.request.user.profile
-        except Profile.DoesNotExist:
-            return Profile.objects.create(
-                user=self.request.user,
-                phone="", 
-                role="manager"  
-            )
-
-# ----------------- Project -----------------
-class ProjectListCreateView(mixins.ListModelMixin, mixins.CreateModelMixin, generics.GenericAPIView):
-    queryset = Project.objects.all()
+class ProjectListCreateView(generics.ListCreateAPIView):
     serializer_class = ProjectSerializer
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request, *args, **kwargs):
-        self.queryset = Project.objects.filter(team_members=request.user)
-        return Response({"status": "success", "data": self.list(request, *args, **kwargs).data}, status=status.HTTP_200_OK)
-
-    def post(self, request, *args, **kwargs):
-        try:
-           
-            profile = request.user.profile
-        except Profile.DoesNotExist:
-           
-            return Response({
-                "status": "error",
-                "message": "Profile not found. Please complete your profile first."
-            }, status=status.HTTP_403_FORBIDDEN)
-        
-        if profile.role != "manager":  
-            return Response({
-                "status": "error",
-                "message": "Only Manager can create projects"
-            }, status=status.HTTP_403_FORBIDDEN)
-        
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        project = serializer.save(owner=request.user)
-        project.team_members.add(request.user)
-        return Response({
-            "status": "success", 
-            "message": "Project created", 
-            "data": serializer.data
-        }, status=status.HTTP_201_CREATED)
+    permission_classes = [permissions.IsAuthenticated]
     
+    def get_queryset(self):
+        return Project.objects.filter(
+            team_members=self.request.user
+        ).prefetch_related('team_members')
     
-class AddMemberView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def post(self, request, pk):
-        try:
-            project = Project.objects.get(pk=pk, owner=request.user)
-        except Project.DoesNotExist:
-            return Response({"status": "error", "message": "Project not found"}, status=status.HTTP_404_NOT_FOUND)
-        user_id = request.data.get("user_id")
-        if not user_id:
-            return Response({"status": "error", "message": "User ID is required"}, status=status.HTTP_400_BAD_REQUEST)
-        try:
-            user = User.objects.get(pk=user_id)
-        except User.DoesNotExist:
-            return Response({"status": "error", "message": "User not found"}, status=status.HTTP_404_NOT_FOUND)
-        project.team_members.add(user)
-        return Response({"status": "success", "message": f"{user.username} added to project", "data": {"project": project.title, "member": user.username}}, status=status.HTTP_200_OK)
+    def perform_create(self, serializer):
+        project = serializer.save()
+        project.team_members.add(self.request.user)
 
 
-class ProjectDetailView(mixins.RetrieveModelMixin, mixins.UpdateModelMixin, mixins.DestroyModelMixin, generics.GenericAPIView):
-    queryset = Project.objects.all()
+class ProjectDetailView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = ProjectSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, IsManager]
 
     def get_queryset(self):
-        return Project.objects.filter(team_members=self.request.user)
+        return Project.objects.filter(
+            team_members=self.request.user
+        ).prefetch_related('team_members', 'tasks')
 
 
-# ----------------- Task -----------------
-class TaskListCreateView(mixins.ListModelMixin, mixins.CreateModelMixin, generics.GenericAPIView):
+class TaskListCreateView(generics.ListCreateAPIView):
     serializer_class = TaskSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, IsManager]
 
     def get_queryset(self):
-        return Task.objects.filter(project__team_members=self.request.user)
+        user = self.request.user
+        project_id = self.request.query_params.get('project_id')
 
-    def get(self, request, *args, **kwargs):
-        return self.list(request, *args, **kwargs)
+        queryset = Task.objects.filter(
+            project__team_members=user
+        ).select_related(
+            'project', 'assignee'
+        ).prefetch_related(
+            'project__team_members', 'comments'
+        )
 
-    def post(self, request, *args, **kwargs):
-        profile = request.user.profile
-        if profile.role != "Manager":
-            return Response({"status":"error","message":"Only Manager can create tasks"}, status=status.HTTP_403_FORBIDDEN)
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        serializer.save()
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
+        if project_id:
+            queryset = queryset.filter(project_id=project_id)
+        return queryset
 
 
-class TaskDetailView(mixins.RetrieveModelMixin, mixins.UpdateModelMixin, mixins.DestroyModelMixin, generics.GenericAPIView):
+class TaskDetailView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = TaskSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, IsManager]
 
     def get_queryset(self):
-        profile = self.request.user.profile
-        if profile.role == "Manager":
-            return Task.objects.filter(project__team_members=self.request.user)
-        else:
-            return Task.objects.filter(assignee=self.request.user)
+        return Task.objects.filter(
+            project__team_members=self.request.user
+        ).select_related('project', 'assignee')
 
 
 class AssignTaskView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, IsManager]
+    serializer_class = AssignTaskSerializer
 
     def post(self, request, pk):
-        profile = request.user.profile
-        if profile.role != "Manager":
-            return Response({"status":"error","message":"Only Manager can assign tasks"}, status=status.HTTP_403_FORBIDDEN)
-        try:
-            task = Task.objects.get(pk=pk)
-        except Task.DoesNotExist:
-            return Response({"error": "Task not found"}, status=status.HTTP_404_NOT_FOUND)
-        user_id = request.data.get("assignee_id")
-        if not user_id:
-            return Response({"error": "Assignee ID is required"}, status=status.HTTP_400_BAD_REQUEST)
-        try:
-            user = User.objects.get(pk=user_id)
-            if user not in task.project.team_members.all():
-                return Response({"error": "User is not a member of this project"}, status=status.HTTP_400_BAD_REQUEST)
-        except User.DoesNotExist:
-            return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
-        task.assignee = user
-        task.save()
-        return Response({"message": f"Task '{task.title}' assigned to {user.username or user.email}"}, status=status.HTTP_200_OK)
+        task = get_object_or_404(Task, id=pk)
+        serializer = self.serializer_class(data=request.data)
+        
+        if serializer.is_valid(raise_exception=True):
+            assignee_id = serializer.validated_data['assignee_id']
+            assignee = get_object_or_404(User, id=assignee_id)
+            task.assignee = assignee
+            task.save()
+            
+            return Response({
+                "message": f"Task '{task.title}' assigned to {assignee.email}",
+                "task": TaskSerializer(task).data
+            }, status=status.HTTP_200_OK)
+        
 
-
-# ----------------- Document -----------------
-class DocumentView(mixins.CreateModelMixin, mixins.ListModelMixin, generics.GenericAPIView):
+class DocumentView(generics.ListCreateAPIView):
     serializer_class = DocumentSerializer
-    permission_classes = [IsAuthenticated]
-    parser_classes = [MultiPartParser, FormParser]
-
+    permission_classes = [permissions.IsAuthenticated]
+    
     def get_queryset(self):
-        return Document.objects.filter(project__team_members=self.request.user)
+        user = self.request.user
+        project_id = self.request.query_params.get('project_id')
+        
+        queryset = Document.objects.filter(
+            project__team_members=user
+        ).select_related('project')
+        
+        if project_id:
+            queryset = queryset.filter(project_id=project_id)
+        return queryset
+    
 
-    def get(self, request, *args, **kwargs):
-        return self.list(request, *args, **kwargs)
-
-    def post(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        serializer.save(uploaded_by=request.user)
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
-
-
-class DocumentDetailView(mixins.RetrieveModelMixin, mixins.UpdateModelMixin, mixins.DestroyModelMixin, generics.GenericAPIView):
+class DocumentDetailView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = DocumentSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        return Document.objects.filter(project__team_members=self.request.user)
+        return Document.objects.filter(
+            project__team_members=self.request.user
+        ).select_related('project') 
 
 
-# ----------------- Comment -----------------
-class CommentListCreateView(mixins.ListModelMixin, mixins.CreateModelMixin, generics.GenericAPIView):
-    serializer_class = CommentSerializer
-    permission_classes = [IsAuthenticated]
+class CommentListCreateView(generics.ListCreateAPIView):
+    serializer_class = CommentsSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        user = self.request.user
+        task_id = self.request.query_params.get('task_id')
+        project_id = self.request.query_params.get('project_id')
+        
+        queryset = Comments.objects.filter(
+            task__project__team_members=user
+        ).select_related(
+            'author', 'task', 'project'
+        )
+        
+        if task_id:
+            queryset = queryset.filter(task_id=task_id)
+        if project_id:
+            queryset = queryset.filter(project_id=project_id)
+        
+        return queryset
+    
+    def perform_create(self, serializer):
+        serializer.save(author=self.request.user)
+
+
+class CommentDetailView(generics.RetrieveUpdateDestroyAPIView):
+    serializer_class = CommentsSerializer
+    permission_classes = [permissions.IsAuthenticated, IsCommentAuthor]
 
     def get_queryset(self):
-        return Comments.objects.filter(project__team_members=self.request.user)
-
-    def get(self, request, *args, **kwargs):
-        return self.list(request, *args, **kwargs)
-
-    def post(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        serializer.save(author=request.user)
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Comments.objects.filter(task__project__team_members=self.request.user)
 
 
-class CommentDetailView(mixins.RetrieveModelMixin, mixins.UpdateModelMixin, mixins.DestroyModelMixin, generics.GenericAPIView):
-    serializer_class = CommentSerializer
-    permission_classes = [IsAuthenticated]
-
-    def get_queryset(self):
-        return Comments.objects.filter(author=self.request.user)
-
-
-# ----------------- Notifications -----------------
-class NotificationView(generics.ListAPIView):
-    serializer_class = NotificationSerializer
-    permission_classes = [IsAuthenticated]
-
-    def get_queryset(self):
-        return Notification.objects.filter(user=self.request.user).order_by('-created_at')
-
-
-class MarkNotificationReadView(generics.UpdateAPIView):
-    serializer_class = NotificationSerializer
-    permission_classes = [IsAuthenticated]
-
-    def get_queryset(self):
-        return Notification.objects.filter(user=self.request.user)
-
-    def patch(self, request, *args, **kwargs):
-        notification = self.get_object()
-        notification.mark_read = True
-        notification.save()
-        return Response({"message": "Notification marked as read", "data": NotificationSerializer(notification).data})
-
-
-# ----------------- Timeline -----------------
 class TimeLineListView(generics.ListAPIView):
     serializer_class = TimeLineSerializer
-    permission_classes = [IsAuthenticated]
-
+    permission_classes = [permissions.IsAuthenticated]
+    
     def get_queryset(self):
-        project_id = self.kwargs.get("project_id")
-        return TimeLine.objects.filter(project_id=project_id).order_by("-time")
+        user = self.request.user
+        project_id = self.request.query_params.get('project_id')
+        
+        queryset = TimeLine.objects.filter(
+            project__team_members=user
+        ).select_related('project')
+
+        if project_id:
+            queryset = queryset.filter(project_id=project_id)
+        
+        return queryset.order_by('-time')
+
+
+class NotificationView(generics.ListAPIView):
+    serializer_class = NotificationSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        return Notification.objects.filter(
+            user=self.request.user
+        ).select_related('user').order_by('-created_at')
+
+
+class MarkNotificationReadView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def put(self, request, pk):
+        notification = get_object_or_404(Notification, id=pk, user=request.user)
+        serializer = MarkNotificationReadSerializer(data=request.data)
+        
+        if serializer.is_valid(raise_exception=True):
+            notification.mark_read = serializer.validated_data['mark_read']
+            notification.save()
+            
+            return Response({
+                "message": "Notification updated successfully",
+                "notification": NotificationSerializer(notification).data
+            }, status=status.HTTP_200_OK)
