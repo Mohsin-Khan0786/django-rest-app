@@ -1,9 +1,7 @@
 from django.contrib.auth import get_user_model
 from django.contrib.auth.hashers import check_password
-
 from rest_framework import serializers
 from rest_framework_simplejwt.tokens import RefreshToken, TokenError
-
 
 User = get_user_model()
 
@@ -16,8 +14,14 @@ class RegisterSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = [
-            "id", "email", "username", "first_name", "last_name",
-            "display_name", "password", "full_name"
+            "id",
+            "email",
+            "username",
+            "first_name",
+            "last_name",
+            "display_name",
+            "password",
+            "full_name",
         ]
 
     def get_full_name(self, obj):

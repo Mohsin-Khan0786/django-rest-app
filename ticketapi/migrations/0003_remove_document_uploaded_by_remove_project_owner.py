@@ -6,16 +6,16 @@ from django.db import migrations
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('ticketapi', '0002_document_uploaded_by_project_owner'),
+        ("ticketapi", "0002_document_uploaded_by_project_owner"),
     ]
 
     operations = [
         migrations.RemoveField(
-            model_name='document',
-            name='uploaded_by',
+            model_name="document",
+            name="uploaded_by",
         ),
         migrations.RemoveField(
-            model_name='project',
-            name='owner',
+            model_name="project",
+            name="owner",
         ),
     ]

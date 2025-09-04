@@ -1,5 +1,6 @@
 from django.contrib import admin
-from .models import Profile, Project, Task, Document, Comments, Notification, TimeLine
+
+from .models import Comments, Document, Notification, Profile, Project, Task, TimeLine
 
 admin.site.register(Project)
 admin.site.register(Profile)
